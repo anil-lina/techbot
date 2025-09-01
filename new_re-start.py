@@ -219,10 +219,10 @@ for i in instruments:
    call_chart=get_option_chart(api,call_details)
    put_chart=get_option_chart(api,put_details)
    if (bool(call_chart['Crossover'].tail(1).item() == 1) & (call_chart['close'].tail(1).item() > call_chart['HMA'].tail(1).item())):
-       print(api.place_order(buy_or_sell='B', product_type='M',exchange=exch, tradingsymbol=bnf_put_sym,quantity=bnf_qty, discloseqty=0,price_type='SL-LMT', price=myround(bnf_put_signal['entry']), trigger_price=myround(bnf_put_signal['entry']-1),retention='DAY', remarks=bnf_put_sym))
+       print(api.place_order(buy_or_sell='B', product_type='M',exchange=exch, tradingsymbol=bnf_put_sym,quantity=call_details['ls'], discloseqty=0,price_type='SL-LMT', price=myround(bnf_put_signal['entry']), trigger_price=myround(bnf_put_signal['entry']-1),retention='DAY', remarks=bnf_put_sym))
    #print(bnf_put_order_ret)
    if (bool(put_chart['Crossover'].tail(1).item() == 1) & (put_chart['close'].tail(1).item() > put_chart['HMA'].tail(1).item())):
-       print(api.place_order(buy_or_sell='B', product_type='M',exchange=exch, tradingsymbol=bnf_put_sym,quantity=bnf_qty, discloseqty=0,price_type='SL-LMT', price=myround(bnf_put_signal['entry']), trigger_price=myround(bnf_put_signal['entry']-1),retention='DAY', remarks=bnf_put_sym))
+       print(api.place_order(buy_or_sell='B', product_type='M',exchange=exch, tradingsymbol=bnf_put_sym,quantity=put_details['ls'], discloseqty=0,price_type='SL-LMT', price=myround(bnf_put_signal['entry']), trigger_price=myround(bnf_put_signal['entry']-1),retention='DAY', remarks=bnf_put_sym))
    #print(bnf_put_order_ret)
    bnf_put_sub_df['Date'] =pd.to_datetime(bnf_put_sub_df['time'].tail(last_candles))
    df.set_index('Date', inplace=True)
