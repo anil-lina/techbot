@@ -26,8 +26,6 @@ def atr(sub_df, n=14):
 def hull_moving_average(s, period):
   """
   Calculates the Hull Moving Average (HMA).
-  Note: The original implementation was complex and might not be standard.
-  This is a more readable version of the same calculation.
   """
   wma_half = s.rolling(period // 2).mean()
   wma_full = s.rolling(period).mean()
@@ -44,8 +42,7 @@ def vwma(data, period=17):
     return vwma
 
 def detect_crossovers(df, column1, column2):
-    df['Signal'] = 0
-    # Ensure we are working with a copy to avoid SettingWithCopyWarning
+    # Create a copy to avoid SettingWithCopyWarning
     df_copy = df.copy()
     df_copy['Signal'] = np.where(df_copy[column1] > df_copy[column2], 1, 0)
     df_copy['crossover'] = df_copy['Signal'].diff()
@@ -78,6 +75,7 @@ def calculate_ema(df, ema_lengths):
 def groom_data(ret_df):
     """
     Cleans and prepares the raw data from the API.
+    This now sets a DatetimeIndex, which is crucial for time-series analysis.
     """
     df = pd.DataFrame(data=ret_df)
     if df.empty:
@@ -85,6 +83,7 @@ def groom_data(ret_df):
     df = df.filter(["time", "into", "inth", "intl", "intc", "intv"], axis=1)
     df.columns = ["time", "open", "high", "low", "close", "volume"]
     df["time"] = pd.to_datetime(df["time"], format="%d-%m-%Y %H:%M:%S")
-    df.sort_values(by="time", inplace=True, ignore_index=True)
+    df.set_index('time', inplace=True)
+    df.sort_index(inplace=True)
     df = df.astype({"open": float, "high": float, "low": float, "close": float, "volume": int})
     return df
