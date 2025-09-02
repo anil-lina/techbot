@@ -15,11 +15,10 @@ class Scanner:
         Wrapper function to scan a single instrument.
         instrument is a list like ['RELIANCE-EQ', 'RELIANCE']
         """
-        instrument_name, instrument_details = instrument
         try:
-            self.strategy.execute_for_instrument(instrument_details, instrument_name)
+            self.strategy.execute(instrument)
         except Exception as e:
-            logging.error(f"Error scanning instrument {instrument_name}: {e}")
+            logging.error(f"Error scanning instrument {instrument[0]}: {e}")
 
     def run(self):
         """

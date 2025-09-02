@@ -70,9 +70,9 @@ class MACD_HMA_Strategy(BaseStrategy):
         df = groom_data(time_series)
         return df.tail(num_candles) # Return only the required number of candles
 
-    def execute_for_instrument(self, instrument_info):
+    def execute(self, instrument_info):
         """
-        Executes the strategy for a single instrument's options.
+        Main execution logic for the strategy for a given instrument.
         This is intended to be called by the scanner.
         """
         instrument_name, instrument_symbol = instrument_info
