@@ -11,7 +11,7 @@ def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
                         subplot_titles=(f'{symbol} Candlestick', 'MACD'),
                         row_heights=[0.7, 0.3])
 
-    # Candlestick chart - Plotly automatically uses the DataFrame index for the x-axis
+    # Candlestick chart
     fig.add_trace(go.Candlestick(x=df.index,
                                open=df['open'],
                                high=df['high'],
@@ -28,13 +28,23 @@ def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
         fig.add_trace(go.Scatter(x=df.index, y=df['vwma'], mode='lines', name='VWMA (17)',
                                  line=dict(color='purple', width=1, dash='dot')), row=1, col=1)
 
-    # Highlight the signal candle
+    # Highlight the signal candle using a more robust method
     if signal_candle is not None:
         signal_type = signal_candle['signal']
         line_color = 'green' if signal_type == 'BUY' else 'red'
-        # .name gives the index of the series, which is the timestamp
-        fig.add_vline(x=signal_candle.name, line_width=1, line_dash="dash", line_color=line_color,
-                      annotation_text=f"{signal_type} Signal", annotation_position="top left")
+        signal_time = signal_candle.name # This is the timestamp from the index
+
+        # Manually draw a vertical line using add_trace
+        y_min = df['low'].min()
+        y_max = df['high'].max()
+        fig.add_trace(go.Scatter(
+            x=[signal_time, signal_time],
+            y=[y_min, y_max],
+            mode='lines',
+            line=dict(color=line_color, width=1, dash='dash'),
+            name=f'{signal_type} Signal',
+            showlegend=True
+        ))
 
     # MACD Plot
     fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], mode='lines', name='MACD',

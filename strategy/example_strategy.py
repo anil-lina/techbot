@@ -100,9 +100,18 @@ class MACD_HMA_Strategy(BaseStrategy):
 
         if signal_type in ['BUY', 'SELL']:
             logging.critical(f"****** {signal_type} SIGNAL DETECTED ON STOCK: {instrument_name} ******")
+
+            # Add extensive logging for debugging the plotting issue
+            logging.info(f"--- Debugging Chart Data for {instrument_name} ---")
+            logging.info(f"Signal Candle Name (Timestamp): {last_signal_info.name}")
+            logging.info(f"Type of Signal Candle Name: {type(last_signal_info.name)}")
+            logging.info(f"Signal Candle Info:\n{last_signal_info.to_string()}")
+            logging.info(f"DataFrame Index Head:\n{df_with_signals.index.head().to_string()}")
+            logging.info(f"--- End of Debugging Info ---")
+
             try:
                 plot_chart(df_with_signals, instrument_name, last_signal_info, title_prefix=f"Stock {signal_type} Signal for")
             except Exception as e:
-                logging.error(f"Failed to generate chart for {instrument_name}: {e}")
+                logging.error(f"Failed to generate chart for {instrument_name}: {e}", exc_info=True)
         else:
             logging.info(f"No signal for {instrument_name}")
