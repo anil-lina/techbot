@@ -106,7 +106,8 @@ class MACD_HMA_Strategy(BaseStrategy):
             logging.info(f"Signal Candle Name (Timestamp): {last_signal_info.name}")
             logging.info(f"Type of Signal Candle Name: {type(last_signal_info.name)}")
             logging.info(f"Signal Candle Info:\n{last_signal_info.to_string()}")
-            logging.info(f"DataFrame Index Head:\n{df_with_signals.index.head().to_string()}")
+            # Corrected the logging line below to slice the index instead of calling .head()
+            logging.info(f"DataFrame Index Head:\n{str(df_with_signals.index[:5])}")
             logging.info(f"--- End of Debugging Info ---")
 
             try:
