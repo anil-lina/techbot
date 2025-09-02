@@ -88,9 +88,8 @@ class Backtester:
             current_price = current_candle['close']
 
             # 3. Find the relevant ITM options for the current moment in time
-            # Note: This is a simplified simulation. A real implementation would need to handle expiry dates robustly.
-            # We are assuming get_itm finds the nearest expiry options for the given price.
-            call_details, put_details = self.api.get_itm(current_price, option_symbol)
+            # We pass the current_time to find the option with the nearest expiry date
+            call_details, put_details = self.api.get_itm(current_price, option_symbol, trade_date=current_time)
             if not call_details or not put_details:
                 continue
 
