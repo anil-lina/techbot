@@ -4,11 +4,11 @@ import numpy as np
 def myround(x, prec=2, base=.05):
   return round(base * round(float(x)/base),prec)
 
-def calculate_macd(data):
-    short_ema = data['close'].ewm(span=12, adjust=False).mean()
-    long_ema = data['close'].ewm(span=26, adjust=False).mean()
+def calculate_macd(data, fast_period=12, slow_period=26, signal_period=9):
+    short_ema = data['close'].ewm(span=fast_period, adjust=False).mean()
+    long_ema = data['close'].ewm(span=slow_period, adjust=False).mean()
     macd = short_ema - long_ema
-    signal_line = macd.ewm(span=9, adjust=False).mean()
+    signal_line = macd.ewm(span=signal_period, adjust=False).mean()
     return macd, signal_line
 
 def atr(sub_df, n=14):

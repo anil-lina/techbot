@@ -8,7 +8,8 @@ class Scanner:
         self.config = config
         self.instruments = self.config.get('instruments', [])
         self.trade_settings = self.config.get('trade_settings', {})
-        self.strategy = MACD_HMA_Strategy(self.api, self.trade_settings)
+        self.strategy_settings = self.config.get('strategy_settings', {})
+        self.strategy = MACD_HMA_Strategy(self.api, self.trade_settings, strategy_settings=self.strategy_settings)
 
     def _scan_instrument(self, instrument):
         """
