@@ -52,7 +52,9 @@ class MACD_HMA_Strategy(BaseStrategy):
         Fetches and prepares historical data for an instrument.
         """
         end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=interval * (num_candles + 10))
+        # Request a wider window (e.g., 5 days) to ensure enough data is captured
+        # even when running outside of market hours.
+        start_time = end_time - timedelta(days=5)
 
         time_series = self.api.get_time_price_series(
             exchange=exchange,
@@ -67,7 +69,8 @@ class MACD_HMA_Strategy(BaseStrategy):
             return pd.DataFrame()
 
         df = groom_data(time_series)
-        return df.tail(num_candles)
+        # Return the last N candles, ensuring the DataFrame is not empty
+        return df.tail(num_candles) if not df.empty else df
 
     def execute(self, instrument_info):
         """
