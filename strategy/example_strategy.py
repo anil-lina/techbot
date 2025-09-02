@@ -31,29 +31,28 @@ class MACD_HMA_Strategy(BaseStrategy):
         if 'volume' in df.columns and df['volume'].sum() > 0:
             df['vwma'] = vwma(df, period=17)
 
-        # Define entry and stop-loss
-        df['entry_price'] = df['close']  # Entry at close of signal candle
-        df['stop_loss'] = df['low'] - df['ATR'] # SL is low of candle minus ATR
+        # Define entry and stop-loss (used by backtester)
+        df['entry_price'] = df['close']
+        df['stop_loss'] = df['low'] - df['ATR']
 
         # Generate signals based on strategy rules
-        # Buy signal: MACD crossover and close is above HMA
         df['signal'] = 'HOLD'
+        # Buy Signal: Bullish crossover and price is above HMA
         buy_conditions = (df['MACD_Crossover'] == 1) & (df['close'] > df['HMA'])
         df.loc[buy_conditions, 'signal'] = 'BUY'
 
-        # In a real scenario, you would also define sell signals.
-        # For now, we focus on the entry signal as in the original script.
+        # Sell Signal: Bearish crossover and price is below HMA
+        sell_conditions = (df['MACD_Crossover'] == -1) & (df['close'] < df['HMA'])
+        df.loc[sell_conditions, 'signal'] = 'SELL'
 
         return df
 
     def _get_historical_data(self, instrument_token, exchange, interval=1, num_candles=50):
         """
         Fetches and prepares historical data for an instrument.
-        Fetches a limited number of recent candles.
         """
         end_time = datetime.now()
-        # Estimate start time based on interval and number of candles
-        start_time = end_time - timedelta(minutes=interval * (num_candles + 5)) # Add buffer
+        start_time = end_time - timedelta(minutes=interval * (num_candles + 10))
 
         time_series = self.api.get_time_price_series(
             exchange=exchange,
@@ -68,84 +67,39 @@ class MACD_HMA_Strategy(BaseStrategy):
             return pd.DataFrame()
 
         df = groom_data(time_series)
-        return df.tail(num_candles) # Return only the required number of candles
+        return df.tail(num_candles)
 
     def execute(self, instrument_info):
         """
-        Main execution logic for the strategy for a given instrument.
-        This is intended to be called by the scanner.
+        Scanner Logic: Executes the strategy on the stock chart itself.
+        If a signal is found, it logs an alert and generates a chart.
         """
-        instrument_name, instrument_symbol = instrument_info
-        logging.info(f"Running strategy for {instrument_name}...")
+        from utils.plotting import plot_chart
 
-        # 1. Get underlying quote to find ITM options
+        instrument_name, _ = instrument_info
+        logging.info(f"Scanning stock: {instrument_name}")
+
         quote = self.api.get_quotes('NSE', instrument_name)
         if not quote or quote.get('stat') != 'Ok':
             logging.error(f"Could not get quote for {instrument_name}")
             return
 
-        last_price = float(quote.get('lp', 0))
-        if last_price == 0:
-            logging.error(f"Last price is zero for {instrument_name}")
+        df = self._get_historical_data(quote['token'], quote['exch'], interval=5, num_candles=100)
+
+        if df.empty or len(df) < 50:
+            logging.warning(f"Not enough data for {instrument_name} to scan.")
             return
 
-        # 2. Find ITM call and put options
-        call_details, put_details = self.api.get_itm(last_price, instrument_symbol)
-
-        if not call_details:
-            logging.warning(f"Could not find ITM call for {instrument_name}")
-        else:
-            self._process_option(call_details, "CE")
-
-        if not put_details:
-            logging.warning(f"Could not find ITM put for {instrument_name}")
-        else:
-            self._process_option(put_details, "PE")
-
-    def _process_option(self, option_details, option_type):
-        """
-        Fetches data, generates signals, and places an order for an option.
-        """
-        from utils.plotting import plot_chart # Import here to avoid circular dependency issues
-
-        logging.info(f"Processing {option_details['tsym']} ({option_type})")
-
-        # Get recent historical data for the option
-        df = self._get_historical_data(option_details['token'], option_details['exch'], interval=1, num_candles=50)
-
-        if df.empty or len(df) < 20: # Need enough data for indicators
-            logging.warning(f"Not enough data for {option_details['tsym']}")
-            return
-
-        # Generate signals
         df_with_signals = self.generate_signals(df)
 
-        # Check for a buy signal on the most recent complete candle
-        last_signal = df_with_signals.iloc[-2] # Use -2 to avoid acting on a still-forming candle
+        last_signal_info = df_with_signals.iloc[-2]
+        signal_type = last_signal_info['signal']
 
-        if last_signal['signal'] == 'BUY':
-            logging.info(f"BUY SIGNAL DETECTED for {option_details['tsym']}")
-
+        if signal_type in ['BUY', 'SELL']:
+            logging.critical(f"****** {signal_type} SIGNAL DETECTED ON STOCK: {instrument_name} ******")
             try:
-                order_response = self.api.place_order(
-                    buy_or_sell='B',
-                    product_type='I', # Intraday
-                    exchange=option_details['exch'],
-                    tradingsymbol=option_details['tsym'],
-                    quantity=self.trade_settings.get('lots', 1) * int(option_details['ls']),
-                    discloseqty=0,
-                    price_type='MKT', # Market order for faster execution
-                    price=0,
-                    trigger_price=None,
-                    retention='DAY',
-                    remarks='Automated scanner trade'
-                )
-                logging.info(f"Order placed for {option_details['tsym']}: {order_response}")
-
-                # Generate a chart for the signal
-                plot_chart(df_with_signals, option_details['tsym'], last_signal)
-
+                plot_chart(df_with_signals, instrument_name, last_signal_info, title_prefix=f"Stock {signal_type} Signal for")
             except Exception as e:
-                logging.error(f"Failed to place order for {option_details['tsym']}: {e}")
+                logging.error(f"Failed to generate chart for {instrument_name}: {e}")
         else:
-            logging.info(f"No signal for {option_details['tsym']}")
+            logging.info(f"No signal for {instrument_name}")

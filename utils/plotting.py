@@ -1,5 +1,6 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from datetime import datetime
 
 def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
     """
@@ -28,8 +29,10 @@ def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
 
     # Highlight the signal candle
     if signal_candle is not None:
-        fig.add_vline(x=signal_candle['time'], line_width=1, line_dash="dash", line_color="green",
-                      annotation_text="Signal", annotation_position="top left")
+        signal_type = signal_candle['signal']
+        line_color = 'green' if signal_type == 'BUY' else 'red'
+        fig.add_vline(x=signal_candle['time'], line_width=1, line_dash="dash", line_color=line_color,
+                      annotation_text=f"{signal_type} Signal", annotation_position="top left")
 
     # MACD Plot
     fig.add_trace(go.Scatter(x=df['time'], y=df['MACD'], mode='lines', name='MACD',
@@ -56,8 +59,6 @@ def plot_backtest(df, trade_df, instrument_name):
     """
     Generates an interactive plot for the backtest results.
     """
-    # This function remains largely the same, but we can call plot_chart for consistency
-    # For now, keeping the original logic to avoid breaking the backtester
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
                         subplot_titles=(f'{instrument_name} Candlestick', 'MACD'),
                         row_heights=[0.7, 0.3])
