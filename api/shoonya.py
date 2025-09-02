@@ -40,48 +40,41 @@ class ShoonyaAPIHandler(NorenApi):
         if trade_date is None:
             trade_date = datetime.now()
 
-        base = 100
-        # Adjust base for specific indices if needed
-        if idx_search in ['NIFTY', 'BANKNIFTY']:
-            base = 50 if idx_search == 'NIFTY' else 100
-
         spot_price = float(spot_price)
-        logging.info(f'LAST TRADING PRICE {idx_search} - {spot_price}')
+        logging.info(f'Finding ITM options for {idx_search} around spot price: {spot_price}')
 
-        # A more flexible way to find strikes
-        put_strike = base * round(spot_price / base)
-        call_strike = base * round(spot_price / base)
+        # Fetch all options for the underlying, don't guess the strike
+        search_results = self.searchscrip('NFO', idx_search)
 
-        logging.info(f'{idx_search} - Searching around strike: {call_strike}')
+        call_scrip = self._find_option(search_results, 'CE', spot_price, trade_date)
+        put_scrip = self._find_option(search_results, 'PE', spot_price, trade_date)
 
-        call_scrip_search = self.searchscrip('NFO', f"{idx_search} {call_strike}")
-        put_scrip_search = self.searchscrip('NFO', f"{idx_search} {put_strike}")
-
-        call_scrip = self._find_option(call_scrip_search, 'CE', call_strike, trade_date)
-        put_scrip = self._find_option(put_scrip_search, 'PE', put_strike, trade_date)
-
-        if not call_scrip or not put_scrip:
-            logging.error("Could not find appropriate call or put scrips.")
-            return None, None
+        if not call_scrip:
+            logging.warning(f"Could not find a suitable ITM Call for {idx_search}")
+        if not put_scrip:
+            logging.warning(f"Could not find a suitable ITM Put for {idx_search}")
 
         return call_scrip, put_scrip
 
-    def _find_option(self, search_result, option_type, strike, trade_date):
+    def _find_option(self, search_result, option_type, spot_price, trade_date):
         if not (search_result and search_result.get('stat') == 'Ok'):
             return None
 
         matching_options = []
         for value in search_result.get('values', []):
-            # Check for option type. We look for nearest strike, not exact.
             if value.get('optt') == option_type:
                 try:
-                    # Expiry date format from Shoonya API is typically DDMMMYYYY
                     expiry_date = datetime.strptime(value.get('optexp'), '%d%b%Y')
-                    # Only consider options that haven't expired yet
-                    if expiry_date.date() >= trade_date.date():
-                        # Calculate strike difference
-                        strike_diff = abs(float(value.get('strprc', 0)) - strike)
-                        matching_options.append((expiry_date, strike_diff, value))
+                    strike_price = float(value.get('strprc', 0))
+
+                    # Check if the option is valid for the trade date and is ITM
+                    is_itm = (option_type == 'CE' and strike_price < spot_price) or \
+                             (option_type == 'PE' and strike_price > spot_price)
+
+                    if expiry_date.date() >= trade_date.date() and is_itm:
+                        # Calculate how "deep" in the money it is (how close to the spot price)
+                        itm_diff = abs(spot_price - strike_price)
+                        matching_options.append((expiry_date, itm_diff, value))
                 except (ValueError, TypeError):
                     # Ignore options with invalid date formats or other errors
                     continue
@@ -89,8 +82,8 @@ class ShoonyaAPIHandler(NorenApi):
         if not matching_options:
             return None
 
-        # Sort by expiry date first, then by how close the strike is
+        # Sort by expiry date first, then by how close it is to the money
         matching_options.sort(key=lambda x: (x[0], x[1]))
 
-        # Return the details of the best matching option
+        # Return the details of the nearest expiry, closest-to-the-money ITM option
         return matching_options[0][2]
