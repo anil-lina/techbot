@@ -70,6 +70,17 @@ class Backtester:
         trades = []
         slippage = self.backtest_settings.get('slippage', 0.01)
 
+        # Find the corresponding option symbol for the given instrument name
+        option_symbol = None
+        for inst in self.config['instruments']:
+            if inst[0] == instrument_name:
+                option_symbol = inst[1]
+                break
+
+        if not option_symbol:
+            logging.error(f"Could not find options symbol for {instrument_name} in stocks.yaml")
+            return
+
         # 2. Iterate through each candle of the underlying equity's data
         for i in range(len(equity_df)):
             current_candle = equity_df.iloc[i]
@@ -79,7 +90,7 @@ class Backtester:
             # 3. Find the relevant ITM options for the current moment in time
             # Note: This is a simplified simulation. A real implementation would need to handle expiry dates robustly.
             # We are assuming get_itm finds the nearest expiry options for the given price.
-            call_details, put_details = self.api.get_itm(current_price, self.config['instruments'][0][1]) # Assuming first instrument for now
+            call_details, put_details = self.api.get_itm(current_price, option_symbol)
             if not call_details or not put_details:
                 continue
 
