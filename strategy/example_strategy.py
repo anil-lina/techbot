@@ -53,10 +53,13 @@ class MACD_HMA_Strategy(BaseStrategy):
     def _get_historical_data(self, instrument_token, exchange, interval=1, num_candles=50):
         """
         Fetches and prepares historical data for an instrument.
-        This is the "rolled back" version that fetches a 5-day window.
+        Uses a large, static window to ensure reliability.
         """
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=5)
+        # Use a large, static window like 30 days, which is proven to be reliable in the backtester.
+        start_time = end_time - timedelta(days=30)
+
+        logging.info(f"Fetching data for the last 30 days to get the most recent {num_candles} candles.")
 
         time_series = self.api.get_time_price_series(
             exchange=exchange,
@@ -71,6 +74,7 @@ class MACD_HMA_Strategy(BaseStrategy):
             return pd.DataFrame()
 
         df = groom_data(time_series)
+        # Return the last N candles from the fetched data
         return df.tail(num_candles) if not df.empty else df
 
     def execute(self, instrument_info):
