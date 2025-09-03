@@ -28,13 +28,12 @@ def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
         fig.add_trace(go.Scatter(x=df.index, y=df['vwma'], mode='lines', name='VWMA (17)',
                                  line=dict(color='purple', width=1, dash='dot')), row=1, col=1)
 
-    # Highlight the signal candle using a more robust method
+    # Highlight the signal candle
     if signal_candle is not None:
         signal_type = signal_candle['signal']
         line_color = 'green' if signal_type == 'BUY' else 'red'
-        signal_time = signal_candle.name # This is the timestamp from the index
+        signal_time = signal_candle.name
 
-        # Manually draw a vertical line using add_trace
         y_min = df['low'].min()
         y_max = df['high'].max()
         fig.add_trace(go.Scatter(
@@ -59,6 +58,9 @@ def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
         title_text=f'{title_prefix} {symbol} - "{quote}"',
         xaxis_rangeslider_visible=False,
     )
+
+    # Disable the hiding of non-trading hours to create a continuous timeline
+    fig.update_xaxes(rangebreaks=[])
 
     # Save to HTML
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -104,6 +106,9 @@ def plot_backtest(df, trade_df, instrument_name):
         xaxis_rangeslider_visible=False,
         legend_title_text='Indicators & Trades'
     )
+
+    # Disable the hiding of non-trading hours to create a continuous timeline
+    fig.update_xaxes(rangebreaks=[])
 
     filename = f"{instrument_name}_backtest.html"
     fig.write_html(filename)
