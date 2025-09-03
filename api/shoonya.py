@@ -19,9 +19,17 @@ class ShoonyaAPIHandler(NorenApi):
             self.config = yaml.load(f, Loader=yaml.FullLoader)
         self.creds = self.config.get('shoonya_creds', {})
 
-    def _save_session(self):
+    def _save_session(self, login_data):
+        """
+        Saves session data from the login response dictionary.
+        """
+        token = login_data.get('susertoken')
+        if not token:
+            logging.error("Could not find 'susertoken' in login response to save session.")
+            return
+
         session_data = {
-            'susertoken': self.susertoken,
+            'susertoken': token,
             'userid': self.creds['user']
         }
         with open(self._session_file, 'w') as f:
@@ -32,32 +40,33 @@ class ShoonyaAPIHandler(NorenApi):
         if not os.path.exists(self._session_file):
             return False
 
-        with open(self._session_file, 'r') as f:
-            session_data = json.load(f)
+        try:
+            with open(self._session_file, 'r') as f:
+                session_data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            os.remove(self._session_file)
+            return False
 
         # Set the session token and check if it's valid with a lightweight call
         self.set_session(
-            userid=session_data['userid'],
-            password=self.creds['pwd'],
-            usertoken=session_data['susertoken']
+            userid=session_data.get('userid'),
+            password=self.creds.get('pwd'),
+            usertoken=session_data.get('susertoken')
         )
 
-        # Test call to see if session is valid
         test_call = self.get_limits()
         if test_call and test_call.get('stat') == 'Ok':
             logging.info("Successfully re-used existing session.")
             return True
         else:
             logging.warning("Existing session token has expired. Please log in again.")
-            os.remove(self._session_file) # Clean up expired session file
+            os.remove(self._session_file)
             return False
 
     def _login(self):
-        # Try to load an existing session first
         if self._load_and_validate_session():
             return
 
-        # If no valid session, proceed with interactive login
         try:
             totp = input('Enter 2FA: ')
             ret = self.login(
@@ -70,12 +79,12 @@ class ShoonyaAPIHandler(NorenApi):
             )
             if ret and ret.get('stat') == 'Ok':
                 logging.info("Login successful.")
-                self._save_session() # Save the new session
+                self._save_session(ret) # Pass the login response to save the token
             else:
                 logging.error(f"Login failed: {ret}")
                 raise ConnectionError("Failed to login to Shoonya API")
         except Exception as e:
-            logging.error(f"An error occurred during login: {e}")
+            logging.error(f"An error occurred during login: {e}", exc_info=True)
             raise
 
     def get_itm(self, spot_price, idx_search, trade_date=None):
