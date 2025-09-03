@@ -1,5 +1,6 @@
 import mplfinance as mpf
 from datetime import datetime
+import pandas as pd
 
 def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
     """
