@@ -1,0 +1,9 @@
+pandas
+numpy
+pyyaml
+NorenRestApiPy
+mplfinance
+plotly
+pytz
+requests
+websocket-client
