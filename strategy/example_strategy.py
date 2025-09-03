@@ -55,9 +55,24 @@ class MACD_HMA_Strategy(BaseStrategy):
     def _get_historical_data(self, instrument_token, exchange, interval=1, num_candles=50):
         """
         Fetches and prepares historical data for an instrument.
+        Dynamically calculates the required historical window based on the requested candles and interval.
         """
+        # Estimate trading minutes in a day
+        TRADING_MINUTES_PER_DAY = 375
+
+        # Calculate the total minutes of data needed
+        total_minutes_needed = interval * num_candles
+
+        # Estimate the number of trading days required, adding a small buffer
+        trading_days_needed = (total_minutes_needed / TRADING_MINUTES_PER_DAY) + 2
+
+        # Convert trading days to calendar days, adding a buffer for weekends/holidays
+        calendar_days_to_fetch = int(trading_days_needed * 1.5) + 2
+
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=5)
+        start_time = end_time - timedelta(days=calendar_days_to_fetch)
+
+        logging.info(f"Fetching {num_candles} {interval}-min candles. Requesting data for the last {calendar_days_to_fetch} calendar days.")
 
         time_series = self.api.get_time_price_series(
             exchange=exchange,
@@ -72,6 +87,7 @@ class MACD_HMA_Strategy(BaseStrategy):
             return pd.DataFrame()
 
         df = groom_data(time_series)
+        # Return the last N candles, ensuring the DataFrame is not empty
         return df.tail(num_candles) if not df.empty else df
 
     def execute(self, instrument_info):
