@@ -19,43 +19,17 @@ class Backtester:
             self.backtest_settings,
             self.strategy_settings
         )
-        self.option_data_cache = {}
-
-    def _get_option_data(self, option_details, start_time, end_time):
-        """
-        Fetches and caches historical data for an option contract.
-        """
-        token = option_details['token']
-        if token in self.option_data_cache:
-            return self.option_data_cache[token]
-
-        logging.info(f"Fetching historical data for {option_details['tsym']} ({token})")
-
-        interval = self.strategy_settings.get('backtest_interval_minutes', 5)
-
-        time_series = self.api.get_time_price_series(
-            exchange=option_details['exch'],
-            token=token,
-            starttime=start_time.timestamp(),
-            endtime=end_time.timestamp(),
-            interval=interval
-        )
-
-        if not time_series:
-            logging.warning(f"No historical data found for {option_details['tsym']}")
-            return pd.DataFrame()
-
-        df = groom_data(time_series)
-        df_with_signals = self.strategy.generate_signals(df)
-        self.option_data_cache[token] = df_with_signals
-        return df_with_signals
 
     def run(self, instrument_name, days=None, show_plot=True):
+        """
+        Runs a backtest by simulating trades on the stock's own historical data.
+        """
         if days is None:
             days = self.backtest_settings.get('days', 30)
 
-        logging.info(f"Starting realistic backtest for {instrument_name} for the last {days} days.")
+        logging.info(f"Starting backtest for {instrument_name} on its own equity data for the last {days} days.")
 
+        # 1. Fetch historical data for the equity
         equity_quote = self.api.get_quotes('NSE', instrument_name)
         if not equity_quote or equity_quote.get('stat') != 'Ok':
             logging.error(f"Could not get quote for {instrument_name}")
@@ -75,92 +49,69 @@ class Backtester:
             logging.error(f"Could not fetch historical data for {instrument_name}.")
             return
 
-        equity_df = groom_data(equity_series)
+        # 2. Generate signals on the equity data
+        df = groom_data(equity_series)
+        df_with_signals = self.strategy.generate_signals(df)
 
+        # 3. Simulate trades based on signals
         trades = []
+        position_open = False
         slippage = self.backtest_settings.get('slippage', 0.01)
 
-        # Find the corresponding option symbol for the given instrument name
-        option_symbol = None
-        for inst in self.config['instruments']:
-            if inst[0] == instrument_name:
-                option_symbol = inst[1]
-                break
+        for i, candle in df_with_signals.iterrows():
+            # Check for entry
+            if candle['signal'] == 'BUY' and not position_open:
+                entry_price = candle['entry_price'] * (1 + slippage)
+                stop_loss_price = candle['stop_loss']
 
-        if not option_symbol:
-            logging.error(f"Could not find options symbol for {instrument_name} in stocks.yaml")
-            return
+                trade = {
+                    'entry_date': i, # i is the timestamp index
+                    'entry_price': entry_price,
+                    'stop_loss': stop_loss_price,
+                    'exit_date': None,
+                    'exit_price': None,
+                    'exit_reason': None,
+                    'symbol': instrument_name
+                }
+                trades.append(trade)
+                position_open = True
 
-        for i in range(len(equity_df)):
-            current_candle = equity_df.iloc[i]
-            current_time = current_candle.name
-            current_price = current_candle['close']
-
-            call_details, put_details = self.api.get_itm(current_price, option_symbol, trade_date=current_time)
-
-            for option_details in [call_details, put_details]:
-                if not option_details:
-                    continue
-
-                option_df = self._get_option_data(option_details, start_time, end_time)
-                if option_df.empty:
-                    continue
-
-                if current_time not in option_df.index:
-                    continue
-
-                option_candle = option_df.loc[current_time]
-
-                if option_candle['signal'] == 'BUY':
-                    if any(t['exit_price'] is None for t in trades):
-                        continue
-
-                    entry_price = option_candle['entry_price'] * (1 + slippage)
-                    sl = option_candle['stop_loss']
-                    tp = entry_price + (entry_price - sl) * 1.5
-
-                    trade = {
-                        'entry_date': current_time,
-                        'entry_price': entry_price,
-                        'stop_loss': sl,
-                        'take_profit': tp,
-                        'exit_date': None,
-                        'exit_price': None,
-                        'symbol': option_details['tsym']
-                    }
-
-                    future_candles = option_df[option_df.index > current_time]
-                    for future_time, future_candle in future_candles.iterrows():
-                        if future_candle['low'] <= sl:
-                            trade['exit_price'] = sl * (1 - slippage)
-                            trade['exit_date'] = future_time
-                            break
-                        if future_candle['high'] >= tp:
-                            trade['exit_price'] = tp * (1 - slippage)
-                            trade['exit_date'] = future_time
-                            break
-
-                    trades.append(trade)
+            # Check for exit
+            elif position_open:
+                active_trade = trades[-1]
+                # Check for stop-loss hit
+                if candle['low'] <= active_trade['stop_loss']:
+                    active_trade['exit_price'] = active_trade['stop_loss'] * (1 - slippage)
+                    active_trade['exit_date'] = i
+                    active_trade['exit_reason'] = 'Stop-Loss'
+                    position_open = False
+                # Check for sell signal exit
+                elif candle['signal'] == 'SELL':
+                    active_trade['exit_price'] = candle['close'] * (1 - slippage)
+                    active_trade['exit_date'] = i
+                    active_trade['exit_reason'] = 'Sell Signal'
+                    position_open = False
 
         if not trades:
             logging.warning("No trades were executed in this backtest.")
             return
 
+        # 4. Calculate and print statistics
         trade_df = pd.DataFrame(trades)
-        trade_df.dropna(subset=['exit_price'], inplace=True)
+        completed_trades = trade_df.dropna(subset=['exit_price']).copy()
 
-        if not trade_df.empty:
-            trade_df['pnl'] = trade_df['exit_price'] - trade_df['entry_price']
-            total_pnl = trade_df['pnl'].sum()
-            wins = trade_df[trade_df['pnl'] > 0]
-            losses = trade_df[trade_df['pnl'] <= 0]
-            win_rate = (len(wins) / len(trade_df)) * 100 if not trade_df.empty else 0
+        if not completed_trades.empty:
+            completed_trades['pnl'] = completed_trades['exit_price'] - completed_trades['entry_price']
+            total_pnl = completed_trades['pnl'].sum()
+            wins = completed_trades[completed_trades['pnl'] > 0]
+            losses = completed_trades[completed_trades['pnl'] <= 0]
+            win_rate = (len(wins) / len(completed_trades)) * 100
             avg_win = wins['pnl'].mean()
             avg_loss = losses['pnl'].mean()
             risk_reward = abs(avg_win / avg_loss) if avg_loss != 0 else np.inf
 
             print("\n--- Backtest Results ---")
-            print(f"Total Trades: {len(trade_df)}")
+            print(f"Total Trades: {len(completed_trades)}")
             print(f"Win Rate: {win_rate:.2f}%")
             print(f"Total PnL: {total_pnl:.2f}")
             print(f"Average Win: {avg_win:.2f}")
@@ -168,15 +119,8 @@ class Backtester:
             print(f"Risk/Reward Ratio: {risk_reward:.2f}")
             print("------------------------\n")
 
-            if show_plot and not trade_df.empty:
-                first_trade_symbol = trade_df.iloc[0]['symbol']
-
-                # Find token for the first traded symbol to retrieve its data from cache
-                first_trade_details = self.api.searchscrip('NFO', first_trade_symbol)
-                if first_trade_details and first_trade_details['stat'] == 'Ok':
-                    first_trade_token = first_trade_details['values'][0]['token']
-                    if first_trade_token in self.option_data_cache:
-                        plot_df = self.option_data_cache[first_trade_token]
-                        plot_backtest(plot_df, trade_df[trade_df['symbol'] == first_trade_symbol], first_trade_symbol)
+            # 5. Generate plot
+            if show_plot:
+                plot_backtest(df_with_signals, completed_trades, instrument_name)
         else:
             print("No completed trades to analyze.")

@@ -15,7 +15,6 @@ class MACD_HMA_Strategy(BaseStrategy):
     def __init__(self, api_handler, trade_settings, backtest_settings=None, strategy_settings=None):
         super().__init__(api_handler, trade_settings)
         self.backtest_settings = backtest_settings if backtest_settings else {}
-        # Use provided strategy settings or an empty dict
         self.strategy_settings = strategy_settings if strategy_settings else {}
 
     def generate_signals(self, df):
@@ -25,7 +24,6 @@ class MACD_HMA_Strategy(BaseStrategy):
         if df.empty:
             return df
 
-        # Get indicator periods from settings, with defaults
         hma_period = self.strategy_settings.get('hma_period', 15)
         vwma_period = self.strategy_settings.get('vwma_period', 17)
         macd_fast = self.strategy_settings.get('macd_fast_period', 12)
@@ -55,24 +53,10 @@ class MACD_HMA_Strategy(BaseStrategy):
     def _get_historical_data(self, instrument_token, exchange, interval=1, num_candles=50):
         """
         Fetches and prepares historical data for an instrument.
-        Dynamically calculates the required historical window based on the requested candles and interval.
+        This is the "rolled back" version that fetches a 5-day window.
         """
-        # Estimate trading minutes in a day
-        TRADING_MINUTES_PER_DAY = 375
-
-        # Calculate the total minutes of data needed
-        total_minutes_needed = interval * num_candles
-
-        # Estimate the number of trading days required, adding a small buffer
-        trading_days_needed = (total_minutes_needed / TRADING_MINUTES_PER_DAY) + 2
-
-        # Convert trading days to calendar days, adding a buffer for weekends/holidays
-        calendar_days_to_fetch = int(trading_days_needed * 1.5) + 2
-
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=calendar_days_to_fetch)
-
-        logging.info(f"Fetching {num_candles} {interval}-min candles. Requesting data for the last {calendar_days_to_fetch} calendar days.")
+        start_time = end_time - timedelta(days=5)
 
         time_series = self.api.get_time_price_series(
             exchange=exchange,
@@ -87,7 +71,6 @@ class MACD_HMA_Strategy(BaseStrategy):
             return pd.DataFrame()
 
         df = groom_data(time_series)
-        # Return the last N candles, ensuring the DataFrame is not empty
         return df.tail(num_candles) if not df.empty else df
 
     def execute(self, instrument_info):
@@ -104,7 +87,6 @@ class MACD_HMA_Strategy(BaseStrategy):
             logging.error(f"Could not get quote for {instrument_name}")
             return
 
-        # Use scanner settings from the config file
         interval = self.strategy_settings.get('scan_interval_minutes', 5)
         num_candles = self.strategy_settings.get('scan_num_candles', 100)
 
