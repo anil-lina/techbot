@@ -55,6 +55,7 @@ class MACD_HMA_Strategy(BaseStrategy):
         df.loc[short_conditions, 'signal'] = 'SELL'
 
         # --- Exit & Risk Management Calculations ---
+        df['entry_price'] = df['close'] # This was the missing line
         # These columns will be calculated but only used if the backtester is updated to support them.
         df['stop_loss'] = 0.0
         df['take_profit'] = 0.0
