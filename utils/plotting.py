@@ -1,7 +1,5 @@
-import matplotlib
-# Set the backend to a non-interactive one before importing mplfinance
-matplotlib.use('Agg')
-import mplfinance as mpf
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import datetime
 import pandas as pd
 import os
@@ -13,93 +11,105 @@ def _ensure_charts_dir_exists():
 
 def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
     """
-    Generates a static chart using mplfinance, highlighting a signal.
+    Generates an interactive plot using Plotly, highlighting a signal.
     """
     _ensure_charts_dir_exists()
 
-    # mplfinance requires a DatetimeIndex
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df_copy = df.copy()
-        df_copy.set_index('time', inplace=True)
-    else:
-        df_copy = df
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                        subplot_titles=(f'{symbol} Candlestick', 'MACD'),
+                        row_heights=[0.7, 0.3])
 
-    ap = [] # addplot list
+    # Candlestick chart
+    fig.add_trace(go.Candlestick(x=df.index,
+                               open=df['open'],
+                               high=df['high'],
+                               low=df['low'],
+                               close=df['close'],
+                               name='Candlestick'), row=1, col=1)
 
-    ap.append(mpf.make_addplot(df_copy['HMA'], color='blue'))
+    # HMA Indicator
+    fig.add_trace(go.Scatter(x=df.index, y=df['HMA'], mode='lines', name='HMA (15)',
+                             line=dict(color='blue', width=1)), row=1, col=1)
 
-    if 'vwma' in df_copy.columns:
-        ap.append(mpf.make_addplot(df_copy['vwma'], color='purple', linestyle='dotted'))
+    if 'vwma' in df.columns:
+        fig.add_trace(go.Scatter(x=df.index, y=df['vwma'], mode='lines', name='VWMA (17)',
+                                 line=dict(color='purple', width=1, dash='dot')), row=1, col=1)
 
-    ap.append(mpf.make_addplot(df_copy['MACD'], panel=1, color='purple', ylabel='MACD'))
-    ap.append(mpf.make_addplot(df_copy['Signal Line'], panel=1, color='orange'))
-
-    vlines = []
     if signal_candle is not None:
+        signal_type = signal_candle['signal']
+        line_color = 'green' if signal_type == 'BUY' else 'red'
         signal_time = signal_candle.name
-        vlines = dict(vlines=[signal_time], colors=['g' if signal_candle['signal'] == 'BUY' else 'r'], linestyle='--')
+
+        y_min = df['low'].min()
+        y_max = df['high'].max()
+        fig.add_trace(go.Scatter(
+            x=[signal_time, signal_time], y=[y_min, y_max],
+            mode='lines', line=dict(color=line_color, width=1, dash='dash'),
+            name=f'{signal_type} Signal'
+        ))
+
+    fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], mode='lines', name='MACD',
+                             line=dict(color='purple', width=1)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['Signal Line'], mode='lines', name='Signal Line',
+                             line=dict(color='orange', width=1)), row=2, col=1)
 
     quote = "Consistency over blast"
-    chart_title = f'{title_prefix} {symbol}\n"{quote}"'
+    fig.update_layout(
+        title_text=f'{title_prefix} {symbol} - "{quote}"',
+        xaxis_rangeslider_visible=False,
+    )
+
+    # Apply the fix for continuous timeline
+    fig.update_xaxes(rangebreaks=[])
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"charts/{symbol}_signal_{timestamp}.png"
-
-    mpf.plot(df_copy, type='candle', style='yahoo',
-             title=chart_title,
-             addplot=ap,
-             panel_ratios=(3, 1),
-             vlines=vlines,
-             show_nontrading=True,
-             savefig=filename)
-
+    filename = f"charts/{symbol}_signal_{timestamp}.html"
+    fig.write_html(filename)
     print(f"Generated signal chart: {filename}")
 
 
 def plot_backtest(df, trade_df, instrument_name):
     """
-    Generates a static chart for the backtest results using mplfinance.
+    Generates an interactive plot for the backtest results using Plotly.
     """
     _ensure_charts_dir_exists()
 
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df_copy = df.copy()
-        df_copy.set_index('time', inplace=True)
-    else:
-        df_copy = df
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                        subplot_titles=(f'{instrument_name} Candlestick', 'MACD'),
+                        row_heights=[0.7, 0.3])
 
-    ap = []
-    ap.append(mpf.make_addplot(df_copy['HMA'], color='blue'))
+    fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'],
+                               low=df['low'], close=df['close'], name='Candlestick'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['HMA'], mode='lines', name='HMA (15)',
+                             line=dict(color='blue', width=1)), row=1, col=1)
 
     if not trade_df.empty:
-        buy_markers = [float('nan')] * len(df_copy)
-        sell_markers = [float('nan')] * len(df_copy)
+        entry_points = trade_df[trade_df['entry_price'].notna()]
+        exit_points = trade_df[trade_df['exit_price'].notna()]
 
-        for _, trade in trade_df.iterrows():
-            if trade['entry_date'] in df_copy.index:
-                idx = df_copy.index.get_loc(trade['entry_date'])
-                buy_markers[idx] = trade['entry_price'] * 0.98
+        fig.add_trace(go.Scatter(x=entry_points['entry_date'], y=entry_points['entry_price'],
+                                 mode='markers', name='Buy Entry',
+                                 marker=dict(color='green', size=10, symbol='triangle-up')), row=1, col=1)
 
-            if trade['exit_date'] in df_copy.index:
-                idx = df_copy.index.get_loc(trade['exit_date'])
-                sell_markers[idx] = trade['exit_price'] * 1.02
+        fig.add_trace(go.Scatter(x=exit_points['exit_date'], y=exit_points['exit_price'],
+                                 mode='markers', name='Sell Exit',
+                                 marker=dict(color='red', size=10, symbol='triangle-down')), row=1, col=1)
 
-        ap.append(mpf.make_addplot(buy_markers, type='scatter', color='green', marker='^', markersize=100))
-        ap.append(mpf.make_addplot(sell_markers, type='scatter', color='red', marker='v', markersize=100))
-
-    ap.append(mpf.make_addplot(df_copy['MACD'], panel=1, color='purple', ylabel='MACD'))
-    ap.append(mpf.make_addplot(df_copy['Signal Line'], panel=1, color='orange'))
+    fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], mode='lines', name='MACD',
+                             line=dict(color='purple', width=1)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['Signal Line'], mode='lines', name='Signal Line',
+                             line=dict(color='orange', width=1)), row=2, col=1)
 
     quote = "Consistency over blast"
-    chart_title = f'Backtest Analysis for {instrument_name}\n"{quote}"'
+    fig.update_layout(
+        title_text=f'Backtest Analysis for {instrument_name} - "{quote}"',
+        xaxis_rangeslider_visible=False,
+        legend_title_text='Indicators & Trades'
+    )
 
-    filename = f"charts/{instrument_name}_backtest.png"
+    # Apply the fix for continuous timeline
+    fig.update_xaxes(rangebreaks=[])
 
-    mpf.plot(df_copy, type='candle', style='yahoo',
-             title=chart_title,
-             addplot=ap,
-             panel_ratios=(3, 1),
-             show_nontrading=True,
-             savefig=filename)
-
+    filename = f"charts/{instrument_name}_backtest.html"
+    fig.write_html(filename)
     print(f"Generated backtest chart: {filename}")
