@@ -20,55 +20,74 @@ class Scanner:
     def _scan_instrument(self, instrument):
         """
         Wrapper function to scan a single instrument.
-        Returns any ITM options found.
+        Returns a dictionary with signal info.
         """
         try:
             return self.strategy.execute(instrument)
         except Exception as e:
             logging.error(f"Error scanning instrument {instrument[0]}: {e}", exc_info=True)
-            return []
+            return None
+
+    def _ensure_dir_exists(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
 
     def run(self):
         """
-        Runs the scanner across all instruments and saves all found ITM options to a CSV file.
+        Runs the scanner and saves buy/sell signals to separate CSV files.
         """
         if not self.instruments:
             logging.warning("No instruments found in the configuration file.")
             return
 
-        # Delete old CSV file if it exists
-        csv_path = 'itm_options.csv'
-        if os.path.exists(csv_path):
-            os.remove(csv_path)
-            logging.info(f"Removed old {csv_path}")
+        # Define paths and ensure base charts directory exists
+        base_path = 'charts/'
+        buy_csv_path = os.path.join(base_path, 'buy.csv')
+        sell_csv_path = os.path.join(base_path, 'sell.csv')
+        self._ensure_dir_exists(base_path)
+
+        # Delete old CSV files
+        if os.path.exists(buy_csv_path): os.remove(buy_csv_path)
+        if os.path.exists(sell_csv_path): os.remove(sell_csv_path)
+        logging.info("Removed old signal CSV files.")
 
         logging.info(f"Starting scanner for {len(self.instruments)} instruments...")
 
-        all_itm_options = []
+        buy_signals = []
+        sell_signals = []
+
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Submit all scan jobs to the executor
             future_to_instrument = {executor.submit(self._scan_instrument, inst): inst for inst in self.instruments}
 
-            # Process results as they complete
             for future in concurrent.futures.as_completed(future_to_instrument):
-                instrument = future_to_instrument[future]
                 try:
-                    itm_options = future.result()
-                    if itm_options:
-                        all_itm_options.extend(itm_options)
+                    result = future.result()
+                    if result and result['signal'] != 'HOLD':
+                        signal_info = {
+                            'instrument': result['instrument'],
+                            'strike_price': result['strike']
+                        }
+                        if result['signal'] == 'BUY':
+                            buy_signals.append(signal_info)
+                        elif result['signal'] == 'SELL':
+                            sell_signals.append(signal_info)
                 except Exception as exc:
-                    logging.error(f'{instrument[0]} generated an exception: {exc}')
+                    logging.error(f'A scan generated an exception: {exc}')
 
-        # Save all collected ITM options to a single CSV file
-        if all_itm_options:
-            df = pd.DataFrame(all_itm_options)
-            # Reorder columns for better readability
-            cols_to_have = ['underlying', 'tsym', 'optt', 'strprc', 'optexp', 'token', 'exch', 'ls']
-            existing_cols = [col for col in cols_to_have if col in df.columns]
-            df = df[existing_cols]
-            df.to_csv(csv_path, index=False)
-            logging.info(f"Successfully saved {len(all_itm_options)} ITM options to {csv_path}")
+        # Save buy signals
+        if buy_signals:
+            df_buy = pd.DataFrame(buy_signals)
+            df_buy.to_csv(buy_csv_path, index=False)
+            logging.info(f"Found {len(buy_signals)} BUY signals. Saved to {buy_csv_path}")
         else:
-            logging.warning("No ITM options were found during the scan.")
+            logging.info("No BUY signals found during the scan.")
+
+        # Save sell signals
+        if sell_signals:
+            df_sell = pd.DataFrame(sell_signals)
+            df_sell.to_csv(sell_csv_path, index=False)
+            logging.info(f"Found {len(sell_signals)} SELL signals. Saved to {sell_csv_path}")
+        else:
+            logging.info("No SELL signals found during the scan.")
 
         logging.info("Scanner run finished.")
