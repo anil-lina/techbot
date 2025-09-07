@@ -11,7 +11,7 @@ def _ensure_dir_exists(path):
 
 def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
     """
-    Generates an interactive plot using Plotly, saving to the new folder structure.
+    Generates an interactive plot using Plotly, highlighting a signal.
     """
     signal_type = signal_candle['signal'].lower() if signal_candle is not None else 'no_signal'
     save_path = f"charts/scanner/{signal_type}/"
@@ -39,7 +39,8 @@ def plot_chart(df, symbol, signal_candle=None, title_prefix="Signal for"):
     quote = "Consistency over blast"
     fig.update_layout(title_text=f'{title_prefix} {symbol} - "{quote}"', xaxis_rangeslider_visible=False)
 
-    # This now uses the default plotly behavior which hides non-trading days.
+    # Re-adding this line to disable time gaps and create a continuous timeline as requested.
+    fig.update_xaxes(rangebreaks=[])
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{save_path}{symbol}_signal_{timestamp}.html"
@@ -71,15 +72,21 @@ def plot_backtest(df, trade_df, instrument_name):
     fig.add_trace(go.Scatter(x=df.index, y=df['Signal Line'], mode='lines', name='Signal Line'), row=2, col=1)
 
     quote = "Consistency over blast"
-    # Create stats table for HTML report
-    pnl = trade_df['pnl'].sum()
-    stats_text = f"Total PnL: {pnl:.2f} | Win Rate: {trade_df[trade_df['pnl']>0].shape[0]/trade_df.shape[0]*100:.2f}% | Trades: {trade_df.shape[0]}"
+
+    if not trade_df.empty:
+        pnl = trade_df['pnl'].sum()
+        stats_text = f"Total PnL: {pnl:.2f} | Win Rate: {trade_df[trade_df['pnl']>0].shape[0]/trade_df.shape[0]*100:.2f}% | Trades: {trade_df.shape[0]}"
+    else:
+        stats_text = "No trades were executed."
 
     fig.update_layout(
         title_text=f'Backtest Analysis for {instrument_name} - "{quote}"<br><sup>{stats_text}</sup>',
         xaxis_rangeslider_visible=False,
         legend_title_text='Indicators & Trades'
     )
+
+    # Re-adding this line to disable time gaps and create a continuous timeline as requested.
+    fig.update_xaxes(rangebreaks=[])
 
     filename = f"{save_path}{instrument_name}_backtest.html"
     fig.write_html(filename)
