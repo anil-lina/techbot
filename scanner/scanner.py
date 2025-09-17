@@ -3,6 +3,7 @@ import logging
 from strategy.example_strategy import MACD_HMA_Strategy
 import os
 import pandas as pd
+from datetime import datetime
 
 class Scanner:
     def __init__(self, api_handler, config):
@@ -34,22 +35,16 @@ class Scanner:
 
     def run(self):
         """
-        Runs the scanner and saves buy/sell signals to separate CSV files.
+        Runs the scanner and appends buy/sell signals to persistent CSV files.
         """
         if not self.instruments:
             logging.warning("No instruments found in the configuration file.")
             return
 
-        # Define paths and ensure base charts directory exists
         base_path = 'charts/'
         buy_csv_path = os.path.join(base_path, 'buy.csv')
         sell_csv_path = os.path.join(base_path, 'sell.csv')
         self._ensure_dir_exists(base_path)
-
-        # Delete old CSV files
-        if os.path.exists(buy_csv_path): os.remove(buy_csv_path)
-        if os.path.exists(sell_csv_path): os.remove(sell_csv_path)
-        logging.info("Removed old signal CSV files.")
 
         logging.info(f"Starting scanner for {len(self.instruments)} instruments...")
 
@@ -64,6 +59,7 @@ class Scanner:
                     result = future.result()
                     if result and result['signal'] != 'HOLD':
                         signal_info = {
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'instrument': result['instrument'],
                             'strike_price': result['strike']
                         }
@@ -74,19 +70,22 @@ class Scanner:
                 except Exception as exc:
                     logging.error(f'A scan generated an exception: {exc}')
 
-        # Save buy signals
+        # Append buy signals
         if buy_signals:
             df_buy = pd.DataFrame(buy_signals)
-            df_buy.to_csv(buy_csv_path, index=False)
-            logging.info(f"Found {len(buy_signals)} BUY signals. Saved to {buy_csv_path}")
+            # Write header only if the file doesn't exist
+            header = not os.path.exists(buy_csv_path)
+            df_buy.to_csv(buy_csv_path, mode='a', header=header, index=False)
+            logging.info(f"Appended {len(buy_signals)} BUY signals to {buy_csv_path}")
         else:
             logging.info("No BUY signals found during the scan.")
 
-        # Save sell signals
+        # Append sell signals
         if sell_signals:
             df_sell = pd.DataFrame(sell_signals)
-            df_sell.to_csv(sell_csv_path, index=False)
-            logging.info(f"Found {len(sell_signals)} SELL signals. Saved to {sell_csv_path}")
+            header = not os.path.exists(sell_csv_path)
+            df_sell.to_csv(sell_csv_path, mode='a', header=header, index=False)
+            logging.info(f"Appended {len(sell_signals)} SELL signals to {sell_csv_path}")
         else:
             logging.info("No SELL signals found during the scan.")
 
