@@ -49,7 +49,9 @@ class MACD_HMA_Strategy(BaseStrategy):
         if not time_series:
             logging.warning(f"No data received for token {instrument_token}")
             return pd.DataFrame()
-        return groom_data(time_series)
+
+        df = groom_data(time_series)
+        return df
 
     def execute(self, instrument_info):
         """
@@ -66,8 +68,6 @@ class MACD_HMA_Strategy(BaseStrategy):
             return None
 
         # --- Signal analysis on the stock ---
-        # Note: The nfo_scanner.py uses a different logic path and calls _get_historical_data directly.
-        # This path is for the original scanner.
         df_1h = self._get_historical_data(quote['token'], quote['exch'], interval=60, num_candles=200)
 
         if df_1h.empty or len(df_1h) < 60:
