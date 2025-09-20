@@ -53,4 +53,25 @@ python main.py backtest --instrument RELIANCE-EQ
 ```
 *   Replace `RELIANCE-EQ` with the symbol of the stock you want to test.
 
-This will print a summary of the backtest results (like PnL and Win Rate) and generate an HTML chart file named `RELIANCE-EQ_backtest.html`.
+This will print a summary of the backtest results (like PnL and Win Rate) and generate an HTML chart file in the `charts/backtest/` folder.
+
+---
+
+### How to Run the High-Speed NFO Scanner
+
+This is a separate, powerful tool for scanning a large list of options contracts directly.
+
+**1. Prepare Your Input File:**
+You must create a file named `NFO_symbols.csv` in the root directory. It must contain the following headers:
+`Exchange,Token,LotSize,Symbol,TradingSymbol,Expiry,Instrument,OptionType,StrikePrice,TickSize`
+
+This file should contain the 76,000+ NFO symbols you want to scan.
+
+**2. Run the Scanner:**
+Use this command to start the scan. It will process the symbols in parallel.
+```bash
+python nfo_scanner.py
+```
+
+**3. Check the Output:**
+The scanner will create a file named `resultant.csv`. This file will contain the full rows from your input CSV for any options that matched the strategy's BUY or SELL criteria. The file is created fresh on each run.
