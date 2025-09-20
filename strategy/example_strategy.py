@@ -46,10 +46,23 @@ class MACD_HMA_Strategy(BaseStrategy):
             starttime=start_time.timestamp(), endtime=end_time.timestamp(),
             interval=interval
         )
+
+        # --- Start of Debugging Prints ---
+        print(f"DEBUG: API response for token {instrument_token}: {time_series}")
+        # --- End of Debugging Prints ---
+
         if not time_series:
             logging.warning(f"No data received for token {instrument_token}")
             return pd.DataFrame()
-        return groom_data(time_series)
+
+        df = groom_data(time_series)
+
+        # --- Start of Debugging Prints ---
+        print(f"DEBUG: DataFrame created for token {instrument_token}:")
+        print(df.head())
+        # --- End of Debugging Prints ---
+
+        return df
 
     def execute(self, instrument_info):
         """
