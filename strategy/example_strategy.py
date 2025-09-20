@@ -46,23 +46,10 @@ class MACD_HMA_Strategy(BaseStrategy):
             starttime=start_time.timestamp(), endtime=end_time.timestamp(),
             interval=interval
         )
-
-        # --- Start of Debugging Prints ---
-        print(f"DEBUG: API response for token {instrument_token}: {time_series}")
-        # --- End of Debugging Prints ---
-
         if not time_series:
             logging.warning(f"No data received for token {instrument_token}")
             return pd.DataFrame()
-
-        df = groom_data(time_series)
-
-        # --- Start of Debugging Prints ---
-        print(f"DEBUG: DataFrame created for token {instrument_token}:")
-        print(df.head())
-        # --- End of Debugging Prints ---
-
-        return df
+        return groom_data(time_series)
 
     def execute(self, instrument_info):
         """
@@ -79,6 +66,8 @@ class MACD_HMA_Strategy(BaseStrategy):
             return None
 
         # --- Signal analysis on the stock ---
+        # Note: The nfo_scanner.py uses a different logic path and calls _get_historical_data directly.
+        # This path is for the original scanner.
         df_1h = self._get_historical_data(quote['token'], quote['exch'], interval=60, num_candles=200)
 
         if df_1h.empty or len(df_1h) < 60:
@@ -90,7 +79,6 @@ class MACD_HMA_Strategy(BaseStrategy):
         last_signal_info = df_with_signals.iloc[-2]
         signal_type = last_signal_info['signal']
 
-        # Default result
         result = {'instrument': instrument_name, 'signal': 'HOLD', 'strike': None}
 
         if signal_type in ['BUY', 'SELL']:
@@ -100,9 +88,8 @@ class MACD_HMA_Strategy(BaseStrategy):
             except Exception as e:
                 logging.error(f"Failed to generate chart for {instrument_name}: {e}", exc_info=True)
 
-            # Find ATM strike to log in the CSV
             last_price = float(quote.get('lp', 0))
-            atm_strike = round(last_price / 100) * 100 # Simple rounding for ATM strike
+            atm_strike = round(last_price / 100) * 100
 
             result['signal'] = signal_type
             result['strike'] = atm_strike

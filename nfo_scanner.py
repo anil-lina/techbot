@@ -38,11 +38,11 @@ def scan_symbol(symbol_data, strategy_instance):
         logging.info(f"Scanning: {trading_symbol}")
 
         # Fetch historical data for the option itself
-        # Using 5-min candles and hardcoding exchange to 'NSE' for testing
+        # Using 60-min candles as per the strategy's design
         df = strategy_instance._get_historical_data(
             instrument_token=token,
-            exchange='NSE', # Hardcoding to NSE to test hypothesis
-            interval=5,
+            exchange=exchange,
+            interval=60,
             num_candles=200
         )
 
