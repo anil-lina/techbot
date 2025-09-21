@@ -40,7 +40,8 @@ class MACD_HMA_Strategy(BaseStrategy):
 
     def _get_historical_data(self, instrument_token, exchange, interval=60, num_candles=200):
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=30)
+        # The user confirmed a 10-day window works. The API likely has a smaller limit for options data.
+        start_time = end_time - timedelta(days=10)
         time_series = self.api.get_time_price_series(
             exchange=exchange, token=instrument_token,
             starttime=start_time.timestamp(), endtime=end_time.timestamp(),
